@@ -1,0 +1,16 @@
+# Binaries for programs and plugins
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary, build directory
+*.test
+/build/
+
+# Go vendor directory
+/vendor/
+
+# Dependency directories
+/Godeps/
+
