@@ -374,7 +374,9 @@ func print_board(board [][]cell, solved int) {
 	draw_box(offx-3, offy-4, sx*5+offx+2, sy*3+offy+1, style, "██████")
 	draw_box(offx-4, offy-5, sx*5+offx+3, sy*3+offy+1, style, "██████")
 	draw_box(offx-5, offy-6, sx*5+offx+4, sy*3+offy+2, style2.Background(tcell.GetColor("#00000000")).Foreground(tcell.GetColor("#788088")), "🬭▌🬞🬁🬏🬀▐🬂")
+	draw_box(offx-1, offy-5, offx+15, offy-1, style2, "🬭▌🬞🬁🬏🬀▐🬂")
 	draw_box(offx-1, offy-1, sx*5+offx, sy*3+offy, style2, "🬭▌🬞🬁🬏🬀▐🬂")
+	print_at(offx-1, offy-1, "🬠🬰🬰🬰🬰🬰🬰🬰🬰🬰🬰🬰🬰🬰🬰🬰🬮", style2)
 	if solved == -1 {
 		print_at(offx+(sx*5/2)-3, offy-3, " X _ X ", style2.Foreground(tcell.GetColor("#da9160")))
 		draw_box(offx+(sx*5/2)-3, offy-4, offx+(sx*5/2)+3, offy-2, style2.Foreground(tcell.GetColor("#da9160")), "")
