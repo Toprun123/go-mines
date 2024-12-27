@@ -14,17 +14,16 @@ import (
 )
 
 var start, pline int
-
 var offx, offy int
-
+var fx, fy, sx, sy, mines int
 var screen tcell.Screen
-
+var gameTime time.Time
+var timr int
 var symbols []rune
 var numbers []rune
-
 var mousey bool
 var mouseThing string
-
+var asciiDigits map[rune][]string
 var gameOver bool
 
 type cell struct {
@@ -39,9 +38,60 @@ type cell struct {
 func main() {
 	symbols = []rune("󰸞󰷚󰉀")
 	numbers = []rune("🯰🯱🯲🯳🯴🯵🯶🯷🯸🯹")
+	asciiDigits = map[rune][]string{
+		'0': {
+			"┏━┓",
+			"┃ ┃",
+			"┗━┛",
+		},
+		'1': {
+			"┏┓ ",
+			" ┃ ",
+			"━┻━",
+		},
+		'2': {
+			"┏━┓",
+			"┏━┛",
+			"┗━┛",
+		},
+		'3': {
+			"┏━┓",
+			" ━┫",
+			"┗━┛",
+		},
+		'4': {
+			"╻  ",
+			"┗━╋",
+			"  ╹",
+		},
+		'5': {
+			"┏━┓",
+			"┗━┓",
+			"┗━┛",
+		},
+		'6': {
+			"┏━┓",
+			"┣━┓",
+			"┗━┛",
+		},
+		'7': {
+			"━━┓",
+			"  ┃",
+			"  ╹",
+		},
+		'8': {
+			"┏━┓",
+			"┣━┫",
+			"┗━┛",
+		},
+		'9': {
+			"┏━┓",
+			"┗━┫",
+			"┗━┛",
+		},
+	}
 	start = 0
 	pline = 20
-
 	screen_tmp, err := tcell.NewScreen()
 	if err != nil {
 		log.Fatalf("Failed to create screen: %v", err)
@@ -55,7 +105,6 @@ func main() {
 	screen.Clear()
 	screen.Show()
 
-	var fx, fy, sx, sy, mines int
 	fx = -1
 	fy = -1
 	mines = 10
@@ -67,6 +116,13 @@ func main() {
 	board, _ := gen_board(sx, sy, mines, fx, fy)
 	refresh(board)
 	screen.Show()
+
+	go func() {
+		for {
+			updateTime()
+			time.Sleep(500 * time.Millisecond)
+		}
+	}()
 
 	for {
 		ev := screen.PollEvent()
@@ -80,32 +136,35 @@ func main() {
 			}
 		case *tcell.EventMouse:
 			x, y := ev.Position()
+			doit := true
 			button := buttonify(ev.Buttons())
-			if x >= offx+(len(board[0])*5/2)-3 && x <= offx+(len(board[0])*5/2)+3 && y >= offy-4 && y <= offy-3 && button == "L" {
+			if x >= offx+(sx*5/2)-3 && x <= offx+(sx*5/2)+3 && y >= offy-4 && y <= offy-3 && button == "L" {
 				fx = -1
 				fy = -1
 				gameOver = false
+				gameTime = time.Time{}
 				board, _ := gen_board(sx, sy, mines, fx, fy)
 				refresh(board)
 				screen.Show()
-				continue
+				doit = false
 			}
 			x = x - offx
 			y = y - offy
 			boardX := int(math.Floor(float64(x) / 5))
 			boardY := int(math.Floor(float64(y) / 3))
-			if fx == -1 && fy == -1 && (button == "L" || button == "R") {
+			if fx == -1 && fy == -1 && (button == "L" || button == "R") && doit {
 				fx = boardX
 				fy = boardY
 				board, _ = gen_board(sx, sy, mines, fx, fy)
+				gameTime = time.Now()
 			}
 			if !gameOver {
 				if (button == "L" || button == "R") && !mousey {
 					mouseThing = button
 					if mouseThing == "L" {
-						_ = reveal(board, boardX, boardY, len(board[0]), len(board))
+						_ = reveal(board, boardX, boardY, sx, sy)
 					} else if mouseThing == "R" {
-						_ = flag(board, boardX, boardY, len(board[0]), len(board))
+						_ = flag(board, boardX, boardY, sx, sy)
 					}
 					mousey = true
 					mouseThing = ""
@@ -127,13 +186,50 @@ func main() {
 	}
 }
 
+func updateTime() {
+	if !gameTime.IsZero() {
+		elapsedTime := time.Since(gameTime)
+		seconds := int(elapsedTime.Seconds())
+		if seconds > 999 {
+			seconds = 999
+		}
+		secondsStr := fmt.Sprintf("%03d", seconds)
+		timr = seconds
+		timeLines := []string{"", "", ""}
+		for _, digit := range secondsStr {
+			digitArt := asciiDigits[digit]
+			for i := 0; i < 3; i++ {
+				timeLines[i] += " " + digitArt[i] + " "
+			}
+		}
+		for i, line := range timeLines {
+			print_at(offx, offy-4+i, line, tcell.StyleDefault.Foreground(tcell.GetColor("#cc0000")).Background(tcell.GetColor("#000000")))
+		}
+		screen.Show()
+	} else {
+		secondsStr := fmt.Sprintf("%03d", timr)
+		timeLines := []string{"", "", ""}
+		for _, digit := range secondsStr {
+			digitArt := asciiDigits[digit]
+			for i := 0; i < 3; i++ {
+				timeLines[i] += " " + digitArt[i] + " "
+			}
+		}
+		for i, line := range timeLines {
+			print_at(offx, offy-4+i, line, tcell.StyleDefault.Foreground(tcell.GetColor("#cc0000")).Background(tcell.GetColor("#000000")))
+		}
+		screen.Show()
+	}
+}
+
 func refresh(board [][]cell) {
 	solved := true
 	state := 0
-	for i := 0; i < len(board); i++ {
-		for j := 0; j < len(board[0]); j++ {
+	for i := 0; i < sy; i++ {
+		for j := 0; j < sx; j++ {
 			if board[i][j].isMine && board[i][j].reveal {
 				solved = false
+				gameTime = time.Time{}
 				state = -1
 				break
 			} else if !board[i][j].isMine && !board[i][j].reveal {
@@ -143,8 +239,8 @@ func refresh(board [][]cell) {
 		}
 	}
 	if solved {
-		for i := 0; i < len(board); i++ {
-			for j := 0; j < len(board[0]); j++ {
+		for i := 0; i < sy; i++ {
+			for j := 0; j < sx; j++ {
 				if board[i][j].isMine {
 					board[i][j].flag = true
 				}
@@ -152,6 +248,7 @@ func refresh(board [][]cell) {
 		}
 		print_it("You won!")
 		gameOver = true
+		gameTime = time.Time{}
 		state = 1
 	}
 	print_board(board, state)
@@ -238,7 +335,19 @@ func gen_board(width, height, mines, fx, fy int) ([][]cell, error) {
 			if board[y][x].isMine {
 				continue
 			}
-			board[y][x].mines = count_mines(board, x, y, width, height)
+			directions := []struct{ dx, dy int }{
+				{-1, -1}, {0, -1}, {1, -1},
+				{-1, 0}, {1, 0},
+				{-1, 1}, {0, 1}, {1, 1},
+			}
+			count := 0
+			for _, dir := range directions {
+				nx, ny := x+dir.dx, y+dir.dy
+				if nx >= 0 && nx < width && ny >= 0 && ny < height && board[ny][nx].isMine {
+					count++
+				}
+			}
+			board[y][x].mines = count
 			colors := map[int]string{
 				0: "#41e8b0",
 				1: "#7cc7ff",
@@ -256,46 +365,30 @@ func gen_board(width, height, mines, fx, fy int) ([][]cell, error) {
 	return board, nil
 }
 
-func count_mines(board [][]cell, x, y, width, height int) int {
-	directions := []struct{ dx, dy int }{
-		{-1, -1}, {0, -1}, {1, -1},
-		{-1, 0}, {1, 0},
-		{-1, 1}, {0, 1}, {1, 1},
-	}
-	count := 0
-	for _, dir := range directions {
-		nx, ny := x+dir.dx, y+dir.dy
-		if nx >= 0 && nx < width && ny >= 0 && ny < height && board[ny][nx].isMine {
-			count++
-		}
-	}
-	return count
-}
-
 func print_board(board [][]cell, solved int) {
 	style := tcell.StyleDefault.Foreground(tcell.GetColor("#464e56"))
 	style2 := tcell.StyleDefault.Background(tcell.GetColor("#464e56")).Foreground(tcell.GetColor("#1e262e"))
-	draw_box(offx-2, offy-1, len(board[0])*5+offx+1, len(board)*3+offy, style, "██████")
-	draw_box(offx-3, offy-2, len(board[0])*5+offx+2, len(board)*3+offy+1, style, "██████")
-	draw_box(offx-3, offy-3, len(board[0])*5+offx+2, len(board)*3+offy+1, style, "██████")
-	draw_box(offx-3, offy-4, len(board[0])*5+offx+2, len(board)*3+offy+1, style, "██████")
-	draw_box(offx-4, offy-5, len(board[0])*5+offx+3, len(board)*3+offy+1, style, "██████")
-	draw_box(offx-5, offy-6, len(board[0])*5+offx+4, len(board)*3+offy+2, style2.Background(tcell.GetColor("#00000000")).Foreground(tcell.GetColor("#788088")), "🬭▌🬞🬁🬏🬀▐🬂")
-	draw_box(offx-1, offy-1, len(board[0])*5+offx, len(board)*3+offy, style2, "🬭▌🬞🬁🬏🬀▐🬂")
+	draw_box(offx-2, offy-1, sx*5+offx+1, sy*3+offy, style, "██████")
+	draw_box(offx-3, offy-2, sx*5+offx+2, sy*3+offy+1, style, "██████")
+	draw_box(offx-3, offy-3, sx*5+offx+2, sy*3+offy+1, style, "██████")
+	draw_box(offx-3, offy-4, sx*5+offx+2, sy*3+offy+1, style, "██████")
+	draw_box(offx-4, offy-5, sx*5+offx+3, sy*3+offy+1, style, "██████")
+	draw_box(offx-5, offy-6, sx*5+offx+4, sy*3+offy+2, style2.Background(tcell.GetColor("#00000000")).Foreground(tcell.GetColor("#788088")), "🬭▌🬞🬁🬏🬀▐🬂")
+	draw_box(offx-1, offy-1, sx*5+offx, sy*3+offy, style2, "🬭▌🬞🬁🬏🬀▐🬂")
 	if solved == -1 {
-		print_at(offx+(len(board[0])*5/2)-3, offy-3, " X _ X ", style2.Foreground(tcell.GetColor("#da9160")))
-		draw_box(offx+(len(board[0])*5/2)-3, offy-4, offx+(len(board[0])*5/2)+3, offy-2, style2.Foreground(tcell.GetColor("#da9160")), "")
+		print_at(offx+(sx*5/2)-3, offy-3, " X _ X ", style2.Foreground(tcell.GetColor("#da9160")))
+		draw_box(offx+(sx*5/2)-3, offy-4, offx+(sx*5/2)+3, offy-2, style2.Foreground(tcell.GetColor("#da9160")), "")
 	} else if solved == 0 {
-		print_at(offx+(len(board[0])*5/2)-3, offy-3, " • ‿ • ", style2.Foreground(tcell.GetColor("#f5f646")))
-		draw_box(offx+(len(board[0])*5/2)-3, offy-4, offx+(len(board[0])*5/2)+3, offy-2, style2.Foreground(tcell.GetColor("#f5f646")), "")
+		print_at(offx+(sx*5/2)-3, offy-3, " • ‿ • ", style2.Foreground(tcell.GetColor("#f5f646")))
+		draw_box(offx+(sx*5/2)-3, offy-4, offx+(sx*5/2)+3, offy-2, style2.Foreground(tcell.GetColor("#f5f646")), "")
 	} else {
-		print_at(offx+(len(board[0])*5/2)-3, offy-3, " • ‿ • ", style2.Foreground(tcell.GetColor("#66c266")))
-		draw_box(offx+(len(board[0])*5/2)-3, offy-4, offx+(len(board[0])*5/2)+3, offy-2, style2.Foreground(tcell.GetColor("#66c266")), "")
+		print_at(offx+(sx*5/2)-3, offy-3, " • ‿ • ", style2.Foreground(tcell.GetColor("#66c266")))
+		draw_box(offx+(sx*5/2)-3, offy-4, offx+(sx*5/2)+3, offy-2, style2.Foreground(tcell.GetColor("#66c266")), "")
 	}
 	chars_i := "▔▕🭽🭼🭾🭿▏▁"
 	symbol := "H"
-	for i := 0; i < len(board); i++ {
-		for j := 0; j < len(board[0]); j++ {
+	for i := 0; i < sy; i++ {
+		for j := 0; j < sx; j++ {
 			chars_i = "▔▕🭽🭼🭾🭿▏▁"
 			if board[i][j].mines == 0 && board[i][j].reveal && !board[i][j].isMine {
 				symbol = ""
@@ -333,6 +426,7 @@ func print_board(board [][]cell, solved int) {
 			draw_box(j*5+offx, i*3+offy, j*5+4+offx, i*3+2+offy, style, chars_i)
 		}
 	}
+	updateTime()
 }
 
 func buttonify(button tcell.ButtonMask) string {
