@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"strings"
 	"time"
@@ -12,8 +13,9 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-var start int
-var pline int
+var start, pline int
+
+var offx, offy int
 
 var screen tcell.Screen
 
@@ -38,7 +40,7 @@ func main() {
 	symbols = []rune("󰸞󰷚󰉀")
 	numbers = []rune("🯰🯱🯲🯳🯴🯵🯶🯷🯸🯹")
 	start = 0
-	pline = 30
+	pline = 20
 
 	screen_tmp, err := tcell.NewScreen()
 	if err != nil {
@@ -53,16 +55,24 @@ func main() {
 	screen.Clear()
 	screen.Show()
 
-	var fx, fy int
-	board, _ := gen_board(10, 10, 15, fx, fy)
-	print_it(fmt.Sprintf("Welcome to go-mines! %c  %c", symbols[4], symbols[5]))
+	var fx, fy, sx, sy, mines int
+	fx = -1
+	fy = -1
+	mines = 10
+	sx = 9
+	sy = 9
+	width, height := screen.Size()
+	offx = width/2 - sx*5/2
+	offy = height/2 - sy*3/2
+	board, _ := gen_board(sx, sy, mines, fx, fy)
 	refresh(board)
+	screen.Show()
 
 	for {
 		ev := screen.PollEvent()
 		switch ev := ev.(type) {
 		case *tcell.EventKey:
-			if ev.Rune() == 'q' {
+			if ev.Rune() == 'l' || ev.Rune() == 'q' {
 				return
 			}
 			if ev.Key() == tcell.KeyCtrlC {
@@ -71,12 +81,23 @@ func main() {
 		case *tcell.EventMouse:
 			x, y := ev.Position()
 			button := buttonify(ev.Buttons())
-			boardX := x / 5
-			boardY := y / 3
-			if fx == 0 && fy == 0 {
+			if x >= offx+(len(board[0])*5/2)-3 && x <= offx+(len(board[0])*5/2)+3 && y >= offy-4 && y <= offy-3 && button == "L" {
+				fx = -1
+				fy = -1
+				gameOver = false
+				board, _ := gen_board(sx, sy, mines, fx, fy)
+				refresh(board)
+				screen.Show()
+				continue
+			}
+			x = x - offx
+			y = y - offy
+			boardX := int(math.Floor(float64(x) / 5))
+			boardY := int(math.Floor(float64(y) / 3))
+			if fx == -1 && fy == -1 && (button == "L" || button == "R") {
 				fx = boardX
-				fx = boardY
-				board, _ = gen_board(10, 10, 15, fx, fy)
+				fy = boardY
+				board, _ = gen_board(sx, sy, mines, fx, fy)
 			}
 			if !gameOver {
 				if (button == "L" || button == "R") && !mousey {
@@ -94,20 +115,26 @@ func main() {
 			}
 			screen.Show()
 		case *tcell.EventResize:
-			// screen.Sync()
-			// screen.Clear()
-			// refresh(board)
-			// screen.Show()
+			screen.Sync()
+			screen.Clear()
+			width, height := screen.Size()
+			offx = width/2 - sx*5/2
+			offy = height/2 - sy*3/2
+			print_it(fmt.Sprintf("Welcome to go-mines! %c  %c", symbols[4], symbols[5]))
+			refresh(board)
+			screen.Show()
 		}
 	}
 }
 
 func refresh(board [][]cell) {
 	solved := true
+	state := 0
 	for i := 0; i < len(board); i++ {
 		for j := 0; j < len(board[0]); j++ {
 			if board[i][j].isMine && board[i][j].reveal {
 				solved = false
+				state = -1
 				break
 			} else if !board[i][j].isMine && !board[i][j].reveal {
 				solved = false
@@ -116,10 +143,18 @@ func refresh(board [][]cell) {
 		}
 	}
 	if solved {
+		for i := 0; i < len(board); i++ {
+			for j := 0; j < len(board[0]); j++ {
+				if board[i][j].isMine {
+					board[i][j].flag = true
+				}
+			}
+		}
 		print_it("You won!")
 		gameOver = true
+		state = 1
 	}
-	print_board(board)
+	print_board(board, state)
 }
 
 func reveal(board [][]cell, x, y, width, height int) error {
@@ -195,10 +230,8 @@ func gen_board(width, height, mines, fx, fy int) ([][]cell, error) {
 		if (x == fx && y == fy) || board[y][x].isMine {
 			continue
 		}
-		if !board[y][x].isMine {
-			board[y][x].isMine = true
-			mineCount++
-		}
+		board[y][x].isMine = true
+		mineCount++
 	}
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
@@ -239,9 +272,26 @@ func count_mines(board [][]cell, x, y, width, height int) int {
 	return count
 }
 
-func print_board(board [][]cell) {
-	style := tcell.StyleDefault.Foreground(tcell.ColorWhite)
-	style2 := tcell.StyleDefault.Foreground(tcell.ColorWhite)
+func print_board(board [][]cell, solved int) {
+	style := tcell.StyleDefault.Foreground(tcell.GetColor("#464e56"))
+	style2 := tcell.StyleDefault.Background(tcell.GetColor("#464e56")).Foreground(tcell.GetColor("#1e262e"))
+	draw_box(offx-2, offy-1, len(board[0])*5+offx+1, len(board)*3+offy, style, "██████")
+	draw_box(offx-3, offy-2, len(board[0])*5+offx+2, len(board)*3+offy+1, style, "██████")
+	draw_box(offx-3, offy-3, len(board[0])*5+offx+2, len(board)*3+offy+1, style, "██████")
+	draw_box(offx-3, offy-4, len(board[0])*5+offx+2, len(board)*3+offy+1, style, "██████")
+	draw_box(offx-4, offy-5, len(board[0])*5+offx+3, len(board)*3+offy+1, style, "██████")
+	draw_box(offx-5, offy-6, len(board[0])*5+offx+4, len(board)*3+offy+2, style2.Background(tcell.GetColor("#00000000")).Foreground(tcell.GetColor("#788088")), "🬭▌🬞🬁🬏🬀▐🬂")
+	draw_box(offx-1, offy-1, len(board[0])*5+offx, len(board)*3+offy, style2, "🬭▌🬞🬁🬏🬀▐🬂")
+	if solved == -1 {
+		print_at(offx+(len(board[0])*5/2)-3, offy-3, " X _ X ", style2.Foreground(tcell.GetColor("#da9160")))
+		draw_box(offx+(len(board[0])*5/2)-3, offy-4, offx+(len(board[0])*5/2)+3, offy-2, style2.Foreground(tcell.GetColor("#da9160")), "")
+	} else if solved == 0 {
+		print_at(offx+(len(board[0])*5/2)-3, offy-3, " • ‿ • ", style2.Foreground(tcell.GetColor("#f5f646")))
+		draw_box(offx+(len(board[0])*5/2)-3, offy-4, offx+(len(board[0])*5/2)+3, offy-2, style2.Foreground(tcell.GetColor("#f5f646")), "")
+	} else {
+		print_at(offx+(len(board[0])*5/2)-3, offy-3, " • ‿ • ", style2.Foreground(tcell.GetColor("#66c266")))
+		draw_box(offx+(len(board[0])*5/2)-3, offy-4, offx+(len(board[0])*5/2)+3, offy-2, style2.Foreground(tcell.GetColor("#66c266")), "")
+	}
 	chars_i := "▔▕🭽🭼🭾🭿▏▁"
 	symbol := "H"
 	for i := 0; i < len(board); i++ {
@@ -279,8 +329,8 @@ func print_board(board [][]cell) {
 				style = tcell.StyleDefault.Background(tcell.GetColor("#384048")).Foreground(tcell.GetColor("#1f272f")).Bold(true)
 				style2 = tcell.StyleDefault.Background(tcell.GetColor("#384048")).Foreground(tcell.GetColor(board[i][j].color)).Bold(true)
 			}
-			print_at(j*5, i*3+1, fmt.Sprint("  ", symbol, "  "), style2)
-			draw_box(j*5, i*3, j*5+4, i*3+2, style, chars_i)
+			print_at(j*5+offx, i*3+1+offy, fmt.Sprint("  ", symbol, "  "), style2)
+			draw_box(j*5+offx, i*3+offy, j*5+4+offx, i*3+2+offy, style, chars_i)
 		}
 	}
 }
