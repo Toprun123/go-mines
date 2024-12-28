@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"math"
@@ -96,6 +97,10 @@ func main() {
 			"   ",
 		},
 	}
+	sx_o := flag.Int("w", 9, "Width of board")
+	sy_o := flag.Int("h", 9, "Height of board")
+	m_o := flag.Int("m", 10, "No. of mines on board")
+	flag.Parse()
 	screen_tmp, err := tcell.NewScreen()
 	if err != nil {
 		log.Fatalf("Failed to create screen: %v", err)
@@ -108,14 +113,23 @@ func main() {
 	screen.EnableMouse()
 	screen.Clear()
 	start = 0
-	pline = 20
+	pline = 7
 	fx = -1
 	fy = -1
-	mines = 20
-	sx = 15
-	sy = 12
+	mines = *m_o
+	sx = *sx_o
+	sy = *sy_o
 	flags = mines
 	width, height := screen.Size()
+	if width <= sx*5+5 || height <= sy*3+5 {
+		screen.Suspend()
+		fmt.Println("Sorry screen size not enough for playing this size of board!")
+		return
+	} else if sx <= 7 || sy <= 2 {
+		screen.Suspend()
+		fmt.Println("Sorry size provided is too small - minimum width: 6 & height: 2!")
+		return
+	}
 	offx = width/2 - (sx*5)/2
 	offy = height/2 - (sy*3-3)/2
 	board, _ := gen_board(sx, sy, mines, fx, fy)
@@ -151,6 +165,7 @@ func main() {
 				refresh(board)
 				screen.Show()
 				doit = false
+				continue
 			}
 			x = x - offx
 			y = y - offy
@@ -165,10 +180,10 @@ func main() {
 			if !gameOver {
 				if (button == "L" || button == "R") && !mousey {
 					mouseThing = button
-					if mouseThing == "L" {
+					if mouseThing == "L" && !(boardX < 0 || boardX >= sx || boardY < 0 || boardY >= sy) && !board[boardY][boardX].flag {
 						_ = reveal(board, boardX, boardY, sx, sy)
 					} else if mouseThing == "R" {
-						_ = flag(board, boardX, boardY, sx, sy)
+						_ = flag_it(board, boardX, boardY, sx, sy)
 					}
 					mousey = true
 					mouseThing = ""
@@ -183,6 +198,16 @@ func main() {
 			width, height := screen.Size()
 			offx = width/2 - sx*5/2
 			offy = height/2 - (sy*3-3)/2
+			if height-sy*3+5 > 5 {
+				str := `
+┏┓         ┳┳┓ •
+┃┓ ┏┓  ━━  ┃┃┃ ┓ ┏┓ ┏┓ ┏
+┗┛ ┗┛      ┛ ┗ ┗ ┛┗ ┗  ┛
+				`
+				print_at(width/2-12, 1, strings.Split(str, "\n")[1], tcell.StyleDefault)
+				print_at(width/2-12, 2, strings.Split(str, "\n")[2], tcell.StyleDefault)
+				print_at(width/2-12, 3, strings.Split(str, "\n")[3], tcell.StyleDefault)
+			}
 			print_it(fmt.Sprintf("Welcome to go-mines! %c  %c", symbols[4], symbols[5]))
 			refresh(board)
 			screen.Show()
@@ -302,7 +327,7 @@ func reveal(board [][]cell, x, y, width, height int) error {
 	return nil
 }
 
-func flag(board [][]cell, x, y, width, height int) error {
+func flag_it(board [][]cell, x, y, width, height int) error {
 	if x < 0 || x >= width || y < 0 || y >= height {
 		return nil
 	}
@@ -396,7 +421,7 @@ func print_board(board [][]cell, solved int) {
 		print_at(offx+(sx*5/2)-3, offy-3, " • ‿ • ", style2.Foreground(tcell.GetColor("#f5f646")))
 		draw_box(offx+(sx*5/2)-3, offy-4, offx+(sx*5/2)+3, offy-2, style2.Foreground(tcell.GetColor("#f5f646")), "")
 	} else {
-		print_at(offx+(sx*5/2)-3, offy-3, " • ‿ • ", style2.Foreground(tcell.GetColor("#66c266")))
+		print_at(offx+(sx*5/2)-3, offy-3, " ^ o ^ ", style2.Foreground(tcell.GetColor("#66c266")))
 		draw_box(offx+(sx*5/2)-3, offy-4, offx+(sx*5/2)+3, offy-2, style2.Foreground(tcell.GetColor("#66c266")), "")
 	}
 	chars_i := "▔▕🭽🭼🭾🭿▏▁"
