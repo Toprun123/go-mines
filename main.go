@@ -25,6 +25,7 @@ var mousey bool
 var mouseThing string
 var asciiDigits map[rune][]string
 var gameOver bool
+var flags int
 
 type cell struct {
 	err    bool
@@ -89,9 +90,12 @@ func main() {
 			"┗━┫",
 			"┗━┛",
 		},
+		'-': {
+			"   ",
+			"╺━╸",
+			"   ",
+		},
 	}
-	start = 0
-	pline = 20
 	screen_tmp, err := tcell.NewScreen()
 	if err != nil {
 		log.Fatalf("Failed to create screen: %v", err)
@@ -103,27 +107,26 @@ func main() {
 	screen = screen_tmp
 	screen.EnableMouse()
 	screen.Clear()
-	screen.Show()
-
+	start = 0
+	pline = 20
 	fx = -1
 	fy = -1
-	mines = 10
-	sx = 9
-	sy = 9
+	mines = 20
+	sx = 15
+	sy = 12
+	flags = mines
 	width, height := screen.Size()
-	offx = width/2 - sx*5/2
-	offy = height/2 - sy*3/2
+	offx = width/2 - (sx*5)/2
+	offy = height/2 - (sy*3-3)/2
 	board, _ := gen_board(sx, sy, mines, fx, fy)
 	refresh(board)
 	screen.Show()
-
 	go func() {
 		for {
 			updateTime()
 			time.Sleep(500 * time.Millisecond)
 		}
 	}()
-
 	for {
 		ev := screen.PollEvent()
 		switch ev := ev.(type) {
@@ -142,6 +145,7 @@ func main() {
 				fx = -1
 				fy = -1
 				gameOver = false
+				flags = mines
 				gameTime = time.Time{}
 				board, _ := gen_board(sx, sy, mines, fx, fy)
 				refresh(board)
@@ -178,7 +182,7 @@ func main() {
 			screen.Clear()
 			width, height := screen.Size()
 			offx = width/2 - sx*5/2
-			offy = height/2 - sy*3/2
+			offy = height/2 - (sy*3-3)/2
 			print_it(fmt.Sprintf("Welcome to go-mines! %c  %c", symbols[4], symbols[5]))
 			refresh(board)
 			screen.Show()
@@ -203,7 +207,7 @@ func updateTime() {
 			}
 		}
 		for i, line := range timeLines {
-			print_at(offx, offy-4+i, line, tcell.StyleDefault.Foreground(tcell.GetColor("#cc0000")).Background(tcell.GetColor("#000000")))
+			print_at(sx*5+offx-15, offy-4+i, line, tcell.StyleDefault.Foreground(tcell.GetColor("#cc0000")).Background(tcell.GetColor("#000000")))
 		}
 		screen.Show()
 	} else {
@@ -216,7 +220,7 @@ func updateTime() {
 			}
 		}
 		for i, line := range timeLines {
-			print_at(offx, offy-4+i, line, tcell.StyleDefault.Foreground(tcell.GetColor("#cc0000")).Background(tcell.GetColor("#000000")))
+			print_at(sx*5+offx-15, offy-4+i, line, tcell.StyleDefault.Foreground(tcell.GetColor("#cc0000")).Background(tcell.GetColor("#000000")))
 		}
 		screen.Show()
 	}
@@ -305,7 +309,13 @@ func flag(board [][]cell, x, y, width, height int) error {
 	if board[y][x].reveal {
 		return nil
 	}
-	board[y][x].flag = !board[y][x].flag
+	if board[y][x].flag {
+		flags++
+		board[y][x].flag = false
+	} else {
+		flags--
+		board[y][x].flag = true
+	}
 	refresh(board)
 	return nil
 }
@@ -377,6 +387,8 @@ func print_board(board [][]cell, solved int) {
 	draw_box(offx-1, offy-5, offx+15, offy-1, style2, "🬭▌🬞🬁🬏🬀▐🬂")
 	draw_box(offx-1, offy-1, sx*5+offx, sy*3+offy, style2, "🬭▌🬞🬁🬏🬀▐🬂")
 	print_at(offx-1, offy-1, "🬠🬰🬰🬰🬰🬰🬰🬰🬰🬰🬰🬰🬰🬰🬰🬰🬮", style2)
+	draw_box(sx*5+offx-16, offy-5, sx*5+offx, offy-1, style2, "🬭▌🬞🬁🬏🬀▐🬂")
+	print_at(sx*5+offx-16, offy-1, "🬯🬰🬰🬰🬰🬰🬰🬰🬰🬰🬰🬰🬰🬰🬰🬰🬐", style2)
 	if solved == -1 {
 		print_at(offx+(sx*5/2)-3, offy-3, " X _ X ", style2.Foreground(tcell.GetColor("#da9160")))
 		draw_box(offx+(sx*5/2)-3, offy-4, offx+(sx*5/2)+3, offy-2, style2.Foreground(tcell.GetColor("#da9160")), "")
@@ -428,6 +440,17 @@ func print_board(board [][]cell, solved int) {
 			draw_box(j*5+offx, i*3+offy, j*5+4+offx, i*3+2+offy, style, chars_i)
 		}
 	}
+	finalStr := fmt.Sprintf("%03d", flags)
+	lines := []string{"", "", ""}
+	for _, digit := range finalStr {
+		digitArt := asciiDigits[digit]
+		for i := 0; i < 3; i++ {
+			lines[i] += " " + digitArt[i] + " "
+		}
+	}
+	for i, line := range lines {
+		print_at(offx, offy-4+i, line, tcell.StyleDefault.Foreground(tcell.GetColor("#cc0000")).Background(tcell.GetColor("#000000")))
+	}
 	updateTime()
 }
 
@@ -473,7 +496,6 @@ func draw_box(x1, y1, x2, y2 int, style tcell.Style, chars_i string) {
 	if chars_i == "" {
 		chars_i = "─│╭╰╮╯" // "━┃┏┗┓┛"
 	}
-	// print_it(s, fmt.Sprintf("Result: %d", utf8.RuneCountInString(chars_i)), style)
 	if utf8.RuneCountInString(chars_i) == 6 {
 		chars := []rune(chars_i)
 		for x := x1; x <= x2; x++ {
