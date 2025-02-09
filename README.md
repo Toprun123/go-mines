@@ -16,7 +16,7 @@ A terminal-based Minesweeper game written in Go, using the `tcell` library for h
 1. Clone this repository:
    ```sh
    git clone https://github.com/Toprun123/go-mines.git
-   cd minesweeper-terminal
+   cd go-mines
    ```
 2. Install dependencies:
    ```sh
@@ -24,11 +24,11 @@ A terminal-based Minesweeper game written in Go, using the `tcell` library for h
    ```
 3. Build the project:
    ```sh
-   go build -o minesweeper
+   go build -o go-mines
    ```
 4. Run the game:
    ```sh
-   ./minesweeper
+   ./go-mines
    ```
 
 ## Controls
