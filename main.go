@@ -16,7 +16,7 @@ import (
 
 var start, pline int
 var offx, offy int
-var fx, fy, sx, sy, mines int
+var fx, fy, sx, sy, ax, ay, mines int
 var screen tcell.Screen
 var gameTime time.Time
 var timr int
@@ -27,6 +27,7 @@ var mouseThing string
 var asciiDigits map[rune][]string
 var gameOver bool
 var flags int
+var board [][]cell
 
 type cell struct {
 	err    bool
@@ -35,6 +36,7 @@ type cell struct {
 	reveal bool
 	isMine bool
 	color  string
+	sel    bool
 }
 
 func main() {
@@ -116,6 +118,8 @@ func main() {
 	pline = 7
 	fx = -1
 	fy = -1
+	ax = 0
+	ay = 0
 	mines = *m_o
 	sx = *sx_o
 	sy = *sy_o
@@ -132,7 +136,7 @@ func main() {
 	}
 	offx = width/2 - (sx*5)/2
 	offy = height/2 - (sy*3-3)/2
-	board, _ := gen_board(sx, sy, mines, fx, fy)
+	board, _ = gen_board(sx, sy, mines, fx, fy)
 	refresh(board)
 	screen.Show()
 	go func() {
@@ -145,15 +149,54 @@ func main() {
 		ev := screen.PollEvent()
 		switch ev := ev.(type) {
 		case *tcell.EventKey:
-			if ev.Rune() == 'l' || ev.Rune() == 'q' {
+			switch ev.Rune() {
+			case 'l', 'q':
 				return
+			case 'f':
+				if !gameOver {
+					_ = flag_it(board, ax, ay, sx, sy)
+				}
+			case 'r', ' ':
+				if !gameOver {
+					_ = reveal(board, ax, ay, sx, sy)
+				}
 			}
-			if ev.Key() == tcell.KeyCtrlC {
+			switch ev.Key() {
+			case tcell.KeyCtrlC:
 				return
+			case tcell.KeyLeft:
+				board[ay][ax].sel = false
+				ax--
+				board[ay][ax].sel = true
+				refresh(board)
+			case tcell.KeyRight:
+				board[ay][ax].sel = false
+				ax++
+				board[ay][ax].sel = true
+				refresh(board)
+			case tcell.KeyUp:
+				board[ay][ax].sel = false
+				ay--
+				board[ay][ax].sel = true
+				refresh(board)
+			case tcell.KeyDown:
+				board[ay][ax].sel = false
+				ay++
+				board[ay][ax].sel = true
+				refresh(board)
+			case tcell.KeyEnter:
+				if fx == -1 && fy == -1 {
+					fx = ax
+					fy = ay
+					board, _ = gen_board(sx, sy, mines, fx, fy)
+					gameTime = time.Now()
+				}
+				if !gameOver {
+					_ = reveal(board, ax, ay, sx, sy)
+				}
 			}
 		case *tcell.EventMouse:
 			x, y := ev.Position()
-			doit := true
 			button := buttonify(ev.Buttons())
 			if x >= offx+(sx*5/2)-3 && x <= offx+(sx*5/2)+3 && y >= offy-4 && y <= offy-3 && button == "L" {
 				fx = -1
@@ -164,14 +207,13 @@ func main() {
 				board, _ := gen_board(sx, sy, mines, fx, fy)
 				refresh(board)
 				screen.Show()
-				doit = false
 				continue
 			}
 			x = x - offx
 			y = y - offy
 			boardX := int(math.Floor(float64(x) / 5))
 			boardY := int(math.Floor(float64(y) / 3))
-			if fx == -1 && fy == -1 && (button == "L" || button == "R") && doit {
+			if fx == -1 && fy == -1 && (button == "L" || button == "R") {
 				fx = boardX
 				fy = boardY
 				board, _ = gen_board(sx, sy, mines, fx, fy)
@@ -346,12 +388,12 @@ func flag_it(board [][]cell, x, y, width, height int) error {
 }
 
 func gen_board(width, height, mines, fx, fy int) ([][]cell, error) {
-	board := make([][]cell, height)
-	for i := range board {
-		board[i] = make([]cell, width)
+	board2 := make([][]cell, height)
+	for i := range board2 {
+		board2[i] = make([]cell, width)
 	}
 	if mines >= width*height {
-		return board, errors.New("too many mines")
+		return board2, errors.New("too many mines")
 	}
 	source := rand.NewSource(time.Now().UnixNano())
 	rand := rand.New(source)
@@ -359,16 +401,19 @@ func gen_board(width, height, mines, fx, fy int) ([][]cell, error) {
 	for mineCount < mines {
 		x := rand.Intn(width)
 		y := rand.Intn(height)
-		if (x == fx && y == fy) || board[y][x].isMine {
+		if (x == fx && y == fy) || board2[y][x].isMine {
 			continue
 		}
-		board[y][x].isMine = true
+		board2[y][x].isMine = true
 		mineCount++
 	}
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
-			if board[y][x].isMine {
+			if board2[y][x].isMine {
 				continue
+			}
+			if ax == x && ay == y {
+				board2[y][x].sel = true
 			}
 			directions := []struct{ dx, dy int }{
 				{-1, -1}, {0, -1}, {1, -1},
@@ -378,11 +423,11 @@ func gen_board(width, height, mines, fx, fy int) ([][]cell, error) {
 			count := 0
 			for _, dir := range directions {
 				nx, ny := x+dir.dx, y+dir.dy
-				if nx >= 0 && nx < width && ny >= 0 && ny < height && board[ny][nx].isMine {
+				if nx >= 0 && nx < width && ny >= 0 && ny < height && board2[ny][nx].isMine {
 					count++
 				}
 			}
-			board[y][x].mines = count
+			board2[y][x].mines = count
 			colors := map[int]string{
 				0: "#41e8b0",
 				1: "#7cc7ff",
@@ -394,10 +439,10 @@ func gen_board(width, height, mines, fx, fy int) ([][]cell, error) {
 				7: "#999999",
 				8: "#d0d8e0",
 			}
-			board[y][x].color = colors[board[y][x].mines]
+			board2[y][x].color = colors[board2[y][x].mines]
 		}
 	}
-	return board, nil
+	return board2, nil
 }
 
 func print_board(board [][]cell, solved int) {
@@ -460,6 +505,10 @@ func print_board(board [][]cell, solved int) {
 				symbol = string(numbers[board[i][j].mines])
 				style = tcell.StyleDefault.Background(tcell.GetColor("#384048")).Foreground(tcell.GetColor("#1f272f")).Bold(true)
 				style2 = tcell.StyleDefault.Background(tcell.GetColor("#384048")).Foreground(tcell.GetColor(board[i][j].color)).Bold(true)
+			}
+			// Chaange color of border if selected
+			if board[i][j].sel {
+				style = style.Foreground(tcell.GetColor("#ff7d7d"))
 			}
 			print_at(j*5+offx, i*3+1+offy, fmt.Sprint("  ", symbol, "  "), style2)
 			draw_box(j*5+offx, i*3+offy, j*5+4+offx, i*3+2+offy, style, chars_i)
