@@ -3,8 +3,7 @@ name: Build and Release Go Binary
 on:
   push:
     tags:
-      - "v*"
-      - "v*.*.*-*"
+      - "*"
 
 jobs:
   build:
